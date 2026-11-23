@@ -595,10 +595,13 @@ window.__ModuleLoader__.load({
       `${MODE_HALF_DAILY} button[class*="panelUnpin"],${MODE_HALF_WORK} button[class*="panelUnpin"]{display:none !important}`,
       `${MODE_HALF_DAILY} button[class*="panelRow"],${MODE_HALF_WORK} button[class*="panelRow"]{position:relative;box-sizing:border-box;display:flex;align-items:center;justify-content:center;gap:4px;width:100%;height:32px;min-height:32px;margin:0;padding:0 6px;border:0;border-radius:14px;background:transparent !important;color:var(--dsw-alias-label-secondary);font:inherit;font-size:14px;line-height:22px}`,
       `${MODE_HALF_DAILY} button[class*="panelRow"] > *,${MODE_HALF_WORK} button[class*="panelRow"] > *{position:relative;z-index:1}`,
-      // The dark thumb and its ink. `:not()` covers work mode, where the
-      // attribute is removed entirely, so the right half is selected by
-      // default and the capsule reads correctly before the first click.
-      `html[${MODE_ATTRIBUTE}="daily"] ${MODE_HALF_DAILY} button[class*="panelRow"]::before,html:not([${MODE_ATTRIBUTE}="daily"]) ${MODE_HALF_WORK} button[class*="panelRow"]::before{content:"";position:absolute;inset:2px;z-index:0;border-radius:12px;background:var(--dsw-alias-button-primary-fill)}`,
+      // The selected thumb and its ink. The fill keeps the theme's primary
+      // colour but sits at 70% — between a glare and a wash — so the white
+      // pill in a dark theme reads as a soft light grey. Only the pill dims;
+      // the label stays on its own layer at full contrast.
+      // `:not()` covers work mode, where the attribute is removed entirely,
+      // so the right half is selected before the first click as well.
+      `html[${MODE_ATTRIBUTE}="daily"] ${MODE_HALF_DAILY} button[class*="panelRow"]::before,html:not([${MODE_ATTRIBUTE}="daily"]) ${MODE_HALF_WORK} button[class*="panelRow"]::before{content:"";position:absolute;inset:2px;z-index:0;border-radius:12px;background:var(--dsw-alias-button-primary-fill);opacity:.7}`,
       `html[${MODE_ATTRIBUTE}="daily"] ${MODE_HALF_DAILY} button[class*="panelRow"],html:not([${MODE_ATTRIBUTE}="daily"]) ${MODE_HALF_WORK} button[class*="panelRow"]{color:var(--dsw-alias-label-primary-inverted)}`,
       `[${VIEW_ACTION_ATTR}]{display:none !important}`,
       `[${VIEW_MORE_EMPTY_ATTR}]{display:none !important}`,
