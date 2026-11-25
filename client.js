@@ -209,6 +209,7 @@ window.__ModuleLoader__.load({
       // lists read the same way; only the controls differ in where they sit.
       pin: '置顶会话',
       unpin: '取消置顶',
+      moreActions: '更多操作',
       archive: '归档会话',
       unarchive: '取消归档',
       pinned: '已置顶',
@@ -279,6 +280,7 @@ window.__ModuleLoader__.load({
       newChat: 'New chat',
       pin: 'Pin session',
       unpin: 'Unpin session',
+      moreActions: 'More actions',
       archive: 'Archive session',
       unarchive: 'Unarchive session',
       pinned: 'Pinned',
@@ -355,9 +357,13 @@ window.__ModuleLoader__.load({
       // The region and its section header mirror the shipped browser's own
       // geometry, declaration for declaration. `.bhn1Oq_root` insets itself by
       // `--dsh-sidebar-inline-padding`, which `regionArea` has already handed
-      // back to the sidebar's own gutter; `.bhn1Oq_sectionHeader` is a 36px row
-      // with `margin-bottom:4px` and `padding-left:4px`; and its label carries no
-      // type of its own — it inherits the sidebar's 14px and the header's
+      // back to the sidebar's own gutter. `.bhn1Oq_sectionHeader` is a 36px row
+      // whose padding-left is `var(--dsh-sidebar-row-padding)` (12px here), and
+      // its `.sectionLabel` adds `position:relative;left:-1px` — so the first
+      // glyph starts at row-padding minus one, not at the 4px this header used
+      // to copy from an older release. That stale 4px is why 「日常聊天」 sat
+      // 7px left of 「工作区」 in a side-by-side capture. The label carries no
+      // type of its own: it inherits the sidebar's 14px and the header's
       // tertiary ink, with `max-width:45%` so it can never crowd the controls.
       //
       // One rule in that stylesheet is NOT mirrored, because it does not land:
@@ -376,8 +382,8 @@ window.__ModuleLoader__.load({
       // its actions entirely, while this header always has the add control to
       // place. With the label hidden in the rail the single remaining child sits
       // at the start either way, so the distribution needs no rail override.
-      '.dsc-head{box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;gap:4px;height:36px;margin-top:2px;margin-bottom:4px;padding-left:4px;color:var(--dsw-alias-label-tertiary);border-radius:12px;flex:none;overflow:hidden}',
-      '.dsc-title{white-space:nowrap;min-width:0;max-width:45%;flex:none;line-height:20px;overflow:hidden}',
+      '.dsc-head{box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;gap:4px;height:36px;margin-top:2px;margin-bottom:4px;padding-left:var(--dsh-sidebar-row-padding,12px);color:var(--dsw-alias-label-tertiary);border-radius:12px;flex:none;overflow:hidden}',
+      '.dsc-title{position:relative;left:-1px;white-space:nowrap;min-width:0;max-width:45%;flex:none;line-height:20px;overflow:hidden}',
       // The header's controls: the archive-filter menu and the add button, in
       // the workspace browser's own order (view options, then add).
       '.dsc-headactions{display:flex;flex:none;align-items:center;gap:4px}',
@@ -414,40 +420,51 @@ window.__ModuleLoader__.load({
       // scrollbar minus offset — 2px — which puts the rows' right edge where
       // 工作's rows put theirs.
       '.dsc-list{display:flex;flex-direction:column;gap:1px;flex:1;min-height:0;margin-left:-4px;margin-right:var(--dsh-session-list-scrollbar-offset);padding-left:4px;padding-right:calc(var(--dsh-session-list-edge-inset) - var(--dsh-session-list-scrollbar-width) - var(--dsh-session-list-scrollbar-offset));padding-bottom:16px;scrollbar-gutter:stable;overflow-y:auto}',
-      // The row keeps 工作's own session-row height. `YDXeBa_sessionRow` in the
-      // workspace browser is a fixed 32px; this row is that row minus its slot
-      // and its hover actions, so it spends those 32px the same way — the
-      // title's 20px line box (below) plus 6px of vertical padding.
+      // The row is now 工作's `.sessionRow`, declaration for declaration
+      // (`Rows.module.css` in `@deepseek-ai/dsh-client-ui-workspace`), not a
+      // lookalike with a dot where the slot should be. The old row spent its
+      // 32px as a 20px title line plus 6px of vertical padding, opened with an
+      // 8px pad + 6px dot + 8px gap: the title landed 22px from the row edge,
+      // 工作's lands 34px, exactly the offset a side-by-side capture shows.
+      // The shipped row is a fixed 32px line with the paint inset carried on
+      // both borders, an asymmetric horizontal pad, a 16px leading slot, and
+      // the label gap before the title. Following those declarations makes the
+      // two lists' titles, status dots and trailing cells share one x axis.
+      //
       // The row's hover paint is 工作's own: the same
       // `--dsw-alias-interactive-bg-hover` (a translucent ink, not a solid
       // layer) inside the same `--dsw-radius-md` corner. A selected row keeps
       // that paint standing, exactly like the workspace browser's selected row.
       //
-      // The row is a `<div role="treeitem">`, not a `<button>`: it now owns two
-      // nested action buttons (archive and pin), and interactive elements must
-      // not nest inside a button. Enter and Space open it the way the shipped
+      // The row is a `<div role="treeitem">`, not a `<button>`: it owns nested
+      // action buttons (archive and pin), and interactive elements must not
+      // nest inside a button. Enter and Space open it the way the shipped
       // session row does, and the nested buttons stop propagation themselves.
-      // The row is now a `<div>` (it has to hold the two action buttons), so it
-      // has to say `border-box` itself: a button used to get that from the UA
-      // stylesheet, and `width:100%` + 16px of horizontal padding on a
-      // content-box div would make every row 16px wider than the list and clip
+      // A div also has to say `border-box` itself: `width:100%` plus padding
+      // on a content-box div would make every row wider than the list and clip
       // the right-hand action against the list's edge.
-      '.dsc-row{box-sizing:border-box;display:flex;align-items:center;gap:8px;width:100%;padding:6px 8px;font:inherit;text-align:left;color:var(--dsw-alias-label-primary);cursor:pointer;background:transparent;border:0;border-radius:var(--dsw-radius-md)}',
+      '.dsc-row{box-sizing:border-box;display:flex;align-items:center;gap:0;height:32px;width:100%;padding:0 8px;padding-inline-start:calc(var(--dsh-sidebar-row-padding,12px) - var(--dsh-sidebar-paint-inset,3px));border-inline:var(--dsh-sidebar-paint-inset,3px) solid transparent;background:transparent;background-clip:padding-box;font:inherit;text-align:left;color:var(--dsw-alias-label-primary);cursor:pointer;user-select:none;-webkit-user-select:none;border-radius:var(--dsw-radius-md)}',
       '.dsc-row:hover,.dsc-row[aria-selected="true"]{background:var(--dsw-alias-interactive-bg-hover)}',
-      // An archived row reads the way 工作's archived row reads: the title drops
-      // to the caption ink and the status dot goes quiet. Nothing else moves —
-      // it keeps its slot, its age, and its hover actions.
+      // The 16px leading cell the shipped browser gives every session row.
+      // The row paints DSH's own `StateDot` here — a spinner while running,
+      // an amber dot while waiting on the user, a green one for completed-but-
+      // unread — and leaves it blank when idle. These two CSS dots are only
+      // the fallback for a primitives build without `StateDot`.
+      '.dsc-slot{flex:none;display:inline-flex;align-items:center;justify-content:center;width:16px;height:20px}',
+      // An archived row reads the way 工作's archived row reads: the title
+      // drops to the caption ink. Nothing else moves — the empty leading
+      // slot, the age and the hover actions all stay where they are.
       '.dsc-row-archived .dsc-rowtitle{color:var(--dsw-alias-label-caption)}',
-      '.dsc-row-archived .dsc-dot{background:var(--dsw-alias-label-caption);opacity:.6}',
       '.dsc-dot{flex:none;width:6px;height:6px;border-radius:50%;background:var(--dsw-alias-border-l2)}',
       '.dsc-dot-on{background:var(--dsw-alias-state-success-primary)}',
       // The title is the workspace browser's `.title`, declaration for
       // declaration (see @deepseek-ai/dsh-client-ui-workspace's
-      // Rows.module.css): 14px/20px — the one type size this column draws its
-      // session names in. The 13px/18px this replaces was a leftover of the
-      // once-tried whole-column 13px (reverted), which left this list a size
-      // smaller than the list it stands in for, in the same column.
-      '.dsc-rowtitle{flex:1;min-width:0;overflow:hidden;font-size:14px;line-height:20px;text-overflow:ellipsis;white-space:nowrap}',
+      // Rows.module.css): 14px/20px, with the shipped `.sessionRow .title`
+      // margins — a label gap after the 16px slot and 6px before the trailing
+      // cell. The 13px/18px this replaces was a leftover of the once-tried
+      // whole-column 13px (reverted), which left this list a size smaller than
+      // the list it stands in for, in the same column.
+      '.dsc-rowtitle{flex:1;min-width:0;margin:0 6px 0 var(--dsh-sidebar-label-gap,6px);overflow:hidden;font-size:14px;line-height:20px;text-overflow:ellipsis;white-space:nowrap}',
       // The trailing age cell is the workspace browser's `.time`, declaration
       // for declaration (see @deepseek-ai/dsh-client-ui-workspace's
       // Rows.module.css): 10px/16px in the tertiary ink, taking no width from
@@ -959,6 +976,14 @@ window.__ModuleLoader__.load({
      * the one 工作 shows: top-center, success mark, inline action buttons.
      */
     const ToastComponent = typeof primitives.Toast === 'function' ? primitives.Toast : null;
+    /**
+     * The workspace browser's own status dot: an animated 14px spinner for an
+     * ongoing session, a 10px dot for `done` (completed but unread) and
+     * `warning` (waiting on the user), and nothing at all for `idle`. Reusing
+     * it instead of a green dot of our own is what makes those three states
+     * read the same in 日常 and 工作.
+     */
+    const StateDotComponent = typeof primitives.StateDot === 'function' ? primitives.StateDot : null;
 
     /**
      * Hang a label on one control, with the workspace browser's own tooltip
@@ -2176,6 +2201,44 @@ window.__ModuleLoader__.load({
         }
 
         /**
+         * The standard-prop session-STATUS reader: the same global seat the
+         * workspace browser reads for its row dots. An older shell without
+         * `useSessionStatus` yields null, which the row treats as "no status
+         * facts" and falls back to the list's own `running` flag.
+         * @param props - the composed slot props.
+         * @returns the status snapshot, or null when the seat is absent.
+         */
+        function useStatusesOf(props) {
+          const read = typeof props.useSessionStatus === 'function'
+            ? props.useSessionStatus
+            : () => null;
+          return read((snapshot) => snapshot);
+        }
+
+        /**
+         * Collapse DSH's session-status ladder (`sessionStatuses` in
+         * ui-workspace's Rows.tsx) to one `StateDot` state:
+         * waiting on the user outranks running, which outranks the completion
+         * reminder; an idle row shows no dot at all. The list's `running`
+         * flag is only the fallback for a shell with no status seat.
+         * @param status - the row's `useSessionStatus` entry, if any.
+         * @param row - the session-list row.
+         * @returns the StateDot state, or null when nothing should be painted.
+         */
+        function rowStateOf(status, row) {
+          const kind = status === undefined || status === null || status.pendingInteraction === undefined || status.pendingInteraction === null
+            ? undefined
+            : status.pendingInteraction.kind;
+          if (kind === 'approval' || kind === 'plan-review' || kind === 'question') return 'warning';
+          const running = status === undefined || status === null || status.running === undefined
+            ? row.running
+            : status.running;
+          if (running === true) return 'ongoing';
+          if (status !== undefined && status !== null && status.completionUnread === true) return 'done';
+          return null;
+        }
+
+        /**
          * Build one transient mode panel — the surface behind a sidebar mode row.
          *
          * A `sidebar.panellist` row's click belongs to the shell and can only
@@ -2535,16 +2598,22 @@ window.__ModuleLoader__.load({
         }
 
         /**
-         * One daily session row: the workspace browser's own 32px row, plus the
-         * two actions this list did not have before.
+         * One daily session row: 工作's own 32px session row, with the same
+         * leading 16px status cell, title margins and trailing band.
          *
-         * Presentation is the shipped row's, line for line — status dot, title,
-         * then a resting cell holding the relative age and (when pinned) the
-         * same 14px pin marker 工作 draws. Hovering retires that cell and brings
-         * up archive and pin, archive first exactly as in the shipped order.
-         * An archived row is muted, keeps its age, and offers unarchive instead
-         * of archive; clicking it is refused with the shipped explanation
-         * rather than opening it.
+         * Presentation follows the shipped row declaration for declaration —
+         * a 16px leading slot carrying DSH's own `StateDot` for the same status
+         * ladder 工作 uses (waiting on the user, running, completed-but-unread,
+         * idle = blank), the title with its label-gap margin, then a resting
+         * cell holding the relative age and (when pinned) the same 14px pin
+         * marker 工作 draws.
+         * Hovering retires that cell and brings up the same three controls in
+         * the same order: the shared 「更多」 trigger, archive, then pin. The
+         * trigger comes from DSH's `contextMenu.button` factory, so the menu
+         * and its entries are the ones a work session gets. An archived row is
+         * muted, keeps its age, and offers unarchive instead of archive;
+         * clicking it is refused with the shipped explanation rather than
+         * opening it.
          *
          * The row is a `div role="treeitem"`; on a real key press Enter/Space
          * open it, while the nested action buttons keep their own clicks.
@@ -2554,6 +2623,10 @@ window.__ModuleLoader__.load({
          * @param props.selected - whether this session is the open one.
          * @param props.t - translate seat bound to {@link LOCALE_NS}.
          * @param props.useSessionAccess - the standard session access hook.
+         * @param props.statuses - the standard `useSessionStatus` snapshot, read
+         * once by the region (null when an older shell has no status seat).
+         * @param props.renderFactorySlot - slot factory renderer for DSH's
+         * context-menu trigger (absent in older shells, where no trigger shows).
          * @param props.onOpen - open the session (or refuse, when archived).
          * @param props.onArchive / props.onUnarchive - archive actions.
          * @param props.onPin / props.onUnpin - pin actions.
@@ -2576,7 +2649,38 @@ window.__ModuleLoader__.load({
             : true;
           const open = () => props.onOpen(row);
 
+          // The leading cell follows 工作's status ladder, read from the same
+          // global seat 工作 reads. Archived rows keep that cell blank there,
+          // and a shell without the seat falls back to the list's `running`.
+          const statuses = props.statuses;
+          const status = statuses !== null && statuses !== undefined && typeof statuses.get === 'function'
+            ? statuses.get(row.id)
+            : undefined;
+          const state = row.archived ? null : rowStateOf(status, row);
+          const dot = state === null ? null
+            : StateDotComponent !== null
+              ? h(StateDotComponent, { key: 'dot', state })
+              : h('span', { key: 'dot', className: 'dsc-dot dsc-dot-on' });
+
           const actions = [];
+          // 工作's trailing band starts with the shared ellipsis menu trigger,
+          // then archive, then pin. Borrow the factory rather than drawing a
+          // lookalike: the menu, its entries and its keyboard handling stay
+          // DSH's, and an older shell simply has no trigger.
+          const renderFactorySlot = props.renderFactorySlot;
+          if (typeof renderFactorySlot === 'function') {
+            const menuButton = renderFactorySlot('contextMenu.button', {
+              target: {
+                kind: 'session',
+                value: { sessionId: row.id, displayTitle: row.displayTitle || row.id },
+              },
+              label: t('moreActions'),
+              className: 'dsc-rowact',
+            });
+            if (menuButton !== null && menuButton !== undefined) {
+              actions.push(h(React.Fragment, { key: 'more' }, menuButton));
+            }
+          }
           const archiveGlyph = row.archived ? UnarchiveGlyph : ArchiveGlyph;
           if (canArchive && archiveGlyph !== null) {
             actions.push(h(RowActionButton, {
@@ -2611,10 +2715,10 @@ window.__ModuleLoader__.load({
               open();
             },
           }, [
-            h('span', {
-              key: 'dot',
-              className: 'dsc-dot' + (row.running ? ' dsc-dot-on' : ''),
-            }),
+            // Same 16px leading cell 工作 gives every session row: blank when
+            // idle, a spinner while running, an amber dot while waiting on the
+            // user, a green one once work finishes unviewed.
+            h('span', { key: 'slot', className: 'dsc-slot' }, dot),
             h('span', { key: 'title', className: 'dsc-rowtitle' }, row.displayTitle || row.id),
             // Trailing cell, the way a workspace row carries it: the title cell
             // keeps `flex:1` and clips, so the age (and the pin marker after it)
@@ -2771,6 +2875,7 @@ window.__ModuleLoader__.load({
           const wide = props.wide !== false;
           const workspaces = useWorkspacesOf(props);
           const sessions = useSessionsOf(props);
+          const statuses = useStatusesOf(props);
           const chat = useChatState();
           // One clock for the whole list: every row's age is read against the
           // same instant, so two rows that are the same age never disagree.
@@ -2848,6 +2953,8 @@ window.__ModuleLoader__.load({
                   selected: row.id === current,
                   t,
                   useSessionAccess: props.useSessionAccess,
+                  renderFactorySlot: props.renderFactorySlot,
+                  statuses,
                   onOpen: openRow,
                   onArchive: archiveDaily,
                   onUnarchive: unarchiveDaily,
