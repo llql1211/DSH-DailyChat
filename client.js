@@ -84,6 +84,13 @@ window.__ModuleLoader__.load({
     /** The single localStorage key holding the active mode. */
     const MODE_KEY = 'dsh.daily-chat.mode';
     /**
+     * One localStorage key holding the last session of each mode, as
+     * `{ daily, work }`. The shortcut uses it to return to where the operator
+     * was instead of piling up a fresh blank session on every switch. Kept
+     * apart from the mode itself so switching modes never clears it.
+     */
+    const LAST_SESSION_KEY = 'dsh.daily-chat.last-session';
+    /**
      * The single localStorage key holding the archived-row filter. It is kept
      * apart from the mode because the two are independent: switching to work
      * and back must not reset which archived chats the list is showing.
@@ -196,6 +203,7 @@ window.__ModuleLoader__.load({
       // the title of the daily session list and should stay descriptive there.
       modeChat: '聊天',
       modeWork: '工作',
+      toggleMode: '切换聊天 / 工作模式',
       newChat: '新建日常聊天',
       // Row actions. The words are the workspace browser's own, so the two
       // lists read the same way; only the controls differ in where they sit.
@@ -267,6 +275,7 @@ window.__ModuleLoader__.load({
       startWork: 'Start working',
       modeChat: 'Chat',
       modeWork: 'Work',
+      toggleMode: 'Toggle chat / work mode',
       newChat: 'New chat',
       pin: 'Pin session',
       unpin: 'Unpin session',
@@ -754,6 +763,52 @@ window.__ModuleLoader__.load({
       }
     }
 
+    /**
+     * The last session each mode was in. Corrupt, partial or hand-edited storage
+     * degrades to "nothing remembered", which makes the shortcut fall back to
+     * the most recent conversation in the target mode.
+     * @returns `{ daily, work }`, each either a session id or null.
+     */
+    function readLastSessions() {
+      const empty = { daily: null, work: null };
+      try {
+        if (typeof localStorage === 'undefined') return empty;
+        const raw = localStorage.getItem(LAST_SESSION_KEY);
+        if (raw === null) return empty;
+        const saved = JSON.parse(raw);
+        if (saved === null || typeof saved !== 'object') return empty;
+        return {
+          daily: typeof saved.daily === 'string' && saved.daily !== '' ? saved.daily : null,
+          work: typeof saved.work === 'string' && saved.work !== '' ? saved.work : null,
+        };
+      } catch (reason) {
+        console.warn('[daily-chat] reading the last sessions failed:', reason);
+        return empty;
+      }
+    }
+
+    /**
+     * Record the session a mode is currently showing. Deliberately idempotent:
+     * the session list publishes many snapshots while a conversation settles,
+     * and the same id must not rewrite storage on each one.
+     * @param mode - `daily` or `work`.
+     * @param sessionId - the main-view session to remember.
+     */
+    function rememberSession(mode, sessionId) {
+      if (mode !== 'daily' && mode !== 'work') return;
+      if (typeof sessionId !== 'string' || sessionId === '') return;
+      const saved = readLastSessions();
+      if (saved[mode] === sessionId) return;
+      saved[mode] = sessionId;
+      try {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem(LAST_SESSION_KEY, JSON.stringify(saved));
+        }
+      } catch (reason) {
+        console.warn('[daily-chat] saving the last session failed:', reason);
+      }
+    }
+
     let state = {
       mode: readMode(),
       busy: false,
@@ -1181,6 +1236,26 @@ window.__ModuleLoader__.load({
           syncModeAttribute(state.mode);
           return () => syncModeAttribute('work');
         }, 'daily-chat: mode-scoped chrome');
+
+        // Remember where each mode was. Reading it off the live session list
+        // rather than off our own few entry points means every way of opening a
+        // session counts — the capsule, a sidebar row, DSH's own buttons and the
+        // toggle shortcut alike. The store publishes a fresh snapshot on each
+        // session event, so the callback only re-reads and writes when the id
+        // actually changes. Blank sessions are skipped: they are placeholders,
+        // and their id is the one DSH reuses for the next New Session click.
+        ctx.effect(() => {
+          const store = ctx.sessions.list;
+          if (store === null || store === undefined || typeof store.subscribe !== 'function') return undefined;
+          return store.subscribe(() => {
+            const snapshot = store.getSnapshot();
+            const id = mainViewSessionId(snapshot);
+            if (id === undefined) return;
+            const row = snapshot === null || snapshot === undefined ? undefined : snapshot.byId[id];
+            if (row === undefined || row.blank === true || row.origin === 'subagent') return;
+            rememberSession(state.mode, id);
+          });
+        }, 'daily-chat: remember the last session per mode');
 
         /** The shipped `startSession`, restored on unload. */
         let originalStartSession = undefined;
@@ -1855,6 +1930,88 @@ window.__ModuleLoader__.load({
           }
         }
 
+        /** The archived ids, read from the model's own (unprojected) snapshot. */
+        function archivedIdsFromRaw() {
+          const snapshot = readRawWorkspaces === undefined ? undefined : readRawWorkspaces();
+          const ids = snapshot === null || snapshot === undefined ? undefined : snapshot.archivedSessionIds;
+          return new Set(Array.isArray(ids) ? ids : []);
+        }
+
+        /**
+         * The session a mode switch should land in. The remembered one wins when
+         * it still belongs to that mode and can be opened; otherwise the most
+         * recently updated conversation of that mode, and otherwise nothing —
+         * the caller then falls back to starting a new session, which is what
+         * makes the shortcut work on a fresh install too.
+         *
+         * Archived chats are skipped: a daily one cannot be opened at all, and
+         * a work one needs the archive filter changed first. Blank placeholders
+         * and subagent sessions are skipped for the same reason the daily list
+         * skips them.
+         * @param mode - the mode being switched to.
+         * @returns a session id, or undefined when there is nothing to resume.
+         */
+        function resumeSessionForMode(mode) {
+          const snapshot = ctx.sessions.list.getSnapshot();
+          const byId = snapshot === null || snapshot === undefined ? undefined : snapshot.byId;
+          if (byId === null || byId === undefined || typeof byId !== 'object') return undefined;
+          const archived = archivedIdsFromRaw();
+          const dailyIds = dailySessionIds();
+          const expected = expectedDailyPath();
+          const usable = (id) => {
+            const row = byId[id];
+            if (row === undefined || row.blank === true || row.origin === 'subagent' || archived.has(id)) return undefined;
+            const daily = isDailySession(id, byId, dailyIds, expected);
+            return (mode === 'daily') === daily ? row : undefined;
+          };
+          const remembered = readLastSessions()[mode];
+          if (remembered !== null && usable(remembered) !== undefined) return remembered;
+          const candidates = mode === 'daily'
+            ? dailyIds
+            : (Array.isArray(snapshot.ids) ? snapshot.ids : Object.keys(byId));
+          let best = undefined;
+          let bestAt = -Infinity;
+          for (const id of candidates) {
+            const row = usable(id);
+            if (row === undefined) continue;
+            const at = typeof row.updatedAt === 'number' && Number.isFinite(row.updatedAt) ? row.updatedAt : 0;
+            if (at > bestAt) {
+              bestAt = at;
+              best = id;
+            }
+          }
+          return best;
+        }
+
+        /** Open an existing session and switch the surrounding mode with it. */
+        function openSessionInMode(mode, sessionId) {
+          startTicket += 1;
+          setState({ mode, busy: false, error: null });
+          ctx.layout.selectPanel(null);
+          ctx.uiWorkspace.openSession(sessionId);
+          rememberSession(mode, sessionId);
+        }
+
+        /**
+         * The mode-toggle shortcut. Unlike the capsule halves — which are New
+         * Session entry points and still start a fresh conversation — this is a
+         * context switch: it returns to where the other mode was left. The
+         * session is opened before anything waits on a workspace, so no middle
+         * page flashes and no async start can drag the UI back into the old mode.
+         */
+        function toggleMode() {
+          if (state.busy) return;
+          const target = state.mode === 'daily' ? 'work' : 'daily';
+          const id = resumeSessionForMode(target);
+          if (id !== undefined) {
+            openSessionInMode(target, id);
+          } else if (target === 'daily') {
+            void startDailyChat();
+          } else {
+            startWorkSession();
+          }
+        }
+
         /* ── the entry row, and the daily home it opens ───────────────────── */
 
         /**
@@ -1905,12 +2062,13 @@ window.__ModuleLoader__.load({
 
         /**
          * The session the centre column currently shows, for the selected-row
-         * highlight. Read from the Session list exactly the way the workspace
-         * browser reads it: the entry retained by the main view.
+         * highlight and for remembering where each mode was. Read from the
+         * Session list exactly the way the workspace browser reads it: the
+         * entry retained by the main view.
          * @param sessions - the session-list snapshot.
          * @returns the session id, or undefined when nothing is open.
          */
-        function currentDailySessionId(sessions) {
+        function mainViewSessionId(sessions) {
           try {
             for (const id of sessions.ids) {
               const row = sessions.byId[id];
@@ -2622,7 +2780,7 @@ window.__ModuleLoader__.load({
           // The list paints one page at a time and adds a page whenever its
           // 1px end strip scrolls into view; see {@link usePagedRows}.
           const paged = usePagedRows(rows);
-          const current = currentDailySessionId(sessions);
+          const current = mainViewSessionId(sessions);
 
           /** Open a row: an archived chat is refused with the shipped notice. */
           const openRow = (row) => {
@@ -2744,6 +2902,42 @@ window.__ModuleLoader__.load({
           key: WORK_PANEL,
           locale: LOCALE_NS,
         }, WorkStarter));
+
+        // The keyboard route between the two modes. Registering through DSH's
+        // shortcut service — instead of a private `keydown` listener — is what
+        // makes the binding visible and rebindable in Settings → Keyboard
+        // shortcuts, where all plugin commands are listed, and what keeps
+        // composition, modal layers and other bindings arbitrated in one place.
+        // `primary` is Ctrl on Windows/Linux and Command on macOS, so the
+        // default is Ctrl+Alt+D on this machine. Web/Linux only admits a small
+        // set of bindings, so that profile is deliberately left unbound.
+        ctx.inject(['shortcuts'], (shortcutsCtx) => {
+          shortcutsCtx.effect(() => {
+            try {
+              return shortcutsCtx.shortcuts.register({
+                id: 'daily-chat.toggleMode',
+                label: () => t('toggleMode'),
+                aliases: ['toggle chat work mode', 'switch mode'],
+                defaults: {
+                  'desktop:macos': { code: 'KeyD', modifiers: ['primary', 'alt'] },
+                  'desktop:windows': { code: 'KeyD', modifiers: ['primary', 'alt'] },
+                  'desktop:linux': { code: 'KeyD', modifiers: ['primary', 'alt'] },
+                  'web:macos': { code: 'KeyD', modifiers: ['primary', 'alt'] },
+                  'web:windows': { code: 'KeyD', modifiers: ['primary', 'alt'] },
+                },
+                regions: ['page', 'editable', 'terminal'],
+                modals: [],
+                resolve: () => ({ status: 'handled', run: toggleMode }),
+              });
+            } catch (reason) {
+              // A future DSH may claim KeyD or tighten its binding rules. Losing
+              // the shortcut must not take the capsule or the rest of the plugin
+              // down with it.
+              console.warn('[daily-chat] registering the mode-toggle shortcut failed:', reason);
+              return undefined;
+            }
+          }, 'daily-chat: toggle mode shortcut');
+        });
 
         ctx.slots.inject('shell.overlay', () => ctx.slots.register({
           name: 'shell.overlay',
