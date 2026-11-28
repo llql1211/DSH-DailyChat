@@ -1,0 +1,71 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+# gh release create needs write access to the repository contents.
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: 从 fork changelog 创建 Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: 提取对应版本的更新说明
+        id: notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          changelog="docs/FORK_CHANGELOG.md"
+
+          if [[ ! -f "$changelog" ]]; then
+            echo "::error::找不到 $changelog"
+            exit 1
+          fi
+
+          # 从 "## [<version>] ..." 取到下一个 "## [" 之前；用字符串下标比较，
+          # 这样版本号里的 + 和 . 不会被当成正则元字符。
+          awk -v want="$version" '
+            /^## \[/ {
+              if (started) exit
+              lb = index($0, "[")
+              rb = index($0, "]")
+              if (substr($0, lb + 1, rb - lb - 1) == want) { started = 1; next }
+            }
+            /^\[/ { if (started) exit }
+            started {
+              if ($0 ~ /[^[:space:]]/) buf = buf (buf == "" ? "" : "\n") $0
+              else if (buf != "") buf = buf "\n"
+            }
+            END { if (buf != "") { sub(/\n+$/, "", buf); print buf } }
+          ' "$changelog" > release-notes.md
+
+          if [[ ! -s release-notes.md ]]; then
+            echo "::error::$changelog 中没有 [$version] 的条目，请先补变更日志再打 tag"
+            exit 1
+          fi
+
+          echo "提取到 $version 的更新说明："
+          cat release-notes.md
+
+      - name: 创建 GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME 已存在，跳过"
+            exit 0
+          fi
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file release-notes.md \
+            --verify-tag
