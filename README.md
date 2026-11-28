@@ -1,5 +1,7 @@
 # dsh-daily-chat
 
+> 本仓库是 [corlinniu/dsh-daily-chat](https://github.com/corlinniu/dsh-daily-chat) 的 fork，差异说明见 [docs/FORK.md](./docs/FORK.md)，逐版改动见 [docs/FORK_CHANGELOG.md](./docs/FORK_CHANGELOG.md)。
+
 > 给 DSH（DeepSeek Harness）的「新会话」加上第二重含义：**聊天** 与 **工作**。
 >
 > 日常模式跑一个以对话为主的轻量 agent —— 有人格、能联网检索、能向你提问、能读写本地文件、能压缩上下文，但没有 Shell、没有计划模式、没有子代理；工作模式完全沿用 DSH 原有行为。两种模式共用的新增东西只有两样：每轮回答页脚上那行耗时（就在「用量 / 时刻」那一行里，见[使用](#使用)与[已知限制](#已知限制)），以及一个切换模式的快捷键 `Ctrl+Alt+D`（可在「设置 → 快捷键」里改绑）。
